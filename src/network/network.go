@@ -3,14 +3,14 @@ package network
 import (
 	"flag"
 	"fmt"
+	"global"
+	//"network/bcast"
 	"network/bcast"
 	"network/localip"
 	"network/peers"
+	"queue"
 	"strconv"
 	"time"
-	"global"
-	"queue"
-	//"msghandler"
 )
 
 const (
@@ -20,71 +20,61 @@ const (
 
 var Local_ip int
 var Is_master bool
-var Single_mode bool
-
-type IP string
-
-var Online_elev[3] int
-
 var Num_elev_online int
+var Lost_network bool
+
+var Elevators_online [3]int
 
 type Master_msg struct {
-	Address IP
+	Address     int
 	Global_list [global.NUM_GLOBAL_ORDERS]queue.Order
 }
 
 type Slave_msg struct {
-	Address IP
+	Address       int
 	Internal_list [global.NUM_INTERNAL_ORDERS]queue.Order
 	External_list [global.NUM_GLOBAL_ORDERS]queue.Order
 	Elevator_info queue.Elev_info
 }
 
 func Choose_master() {
-	ip_adresses := Online_elev
-	highest_ip := 0
+	ip_addresses := Elevators_online
 	Num_elev_online = 0
-
+	highest_ip := 0
 	for i := 0; i < 2; i++ {
-		if ip_adresses[i] != -1 {
-			Num_elev_online = Num_elev_online +1
-		}
-		if ip_adresses[i] > highest_ip {
-			highest_ip = ip_adresses[i]
+		if ip_addresses[i] > highest_ip {
+			highest_ip = ip_addresses[i]
 		}
 	}
 	if Local_ip == highest_ip {
 		fmt.Println("I am the master.")
 		Is_master = true
-	}
-	if highest_ip == 0{
-		fmt.Println(" I have lost network")
-		Is_master = false
-		Single_mode = true
-
-
 	} else {
 		fmt.Println("I am a slave.")
 		Is_master = false
 	}
+	if highest_ip == 0 {
+		fmt.Println("I have lost network")
+		Is_master = false
+		Lost_network = true
+	}
 }
 
-func Network_handler(change_in_network_chan chan bool) {
+func Network_handler() {
+	var new_info peers.PeerUpdate
 
-	local_ip, _ := localip.LocalIP()
 	var id string
 	flag.StringVar(&id, "id", "", "id of this peer")
 	flag.Parse()
-	var new_info peers.PeerUpdate
+	//localip, _ := localip.LocalIP()
+
 	if id == "" {
-		local_ip, err := Local_ip
+		local_ip, err := localip.LocalIP()
 		if err != nil {
 			fmt.Println(err)
 			local_ip = "Disconnected."
 		}
 		id = fmt.Sprintf(local_ip)
-
-		Local_ip,_ := strconv.Atoi(localip[12:])
 
 		peer_update_chan := make(chan peers.PeerUpdate)
 		peer_transmit_enable_chan := make(chan bool)
@@ -94,33 +84,33 @@ func Network_handler(change_in_network_chan chan bool) {
 		for {
 			select {
 			case new_info_catcher := <-peer_update_chan:
-				change_in_network_chan <- true
+				Num_elev_online = 0
 				new_info = new_info_catcher
 
 				fmt.Printf("Peer update:\n")
 				fmt.Printf("  Peers:    %q\n", new_info.Peers)
 				fmt.Printf("  New:      %q\n", new_info.New)
 				fmt.Printf("  Lost:     %q\n", new_info.Lost)
-
-
-
-				for i:= 0 ; i < len(new_info.Peers) ; i ++ {
+				for i := 0; i < len(new_info.Peers); i++ {
 					str_ip := new_info.Peers[i]
-					int_ip,_ := strconv.Atoi(str_ip[12:])
-					Online_elev[i] = int_ip
+					int_ip, _ := strconv.Atoi(str_ip[12:])
+					Elevators_online[i] = int_ip
+					Num_elev_online = Num_elev_online + 1
 				}
-				if len(new_info.Peers) == 2{
-					Online_elev[2] = -1
+				if len(new_info.Peers) == 2 {
+					Elevators_online[2] = -1
 				}
 				if len(new_info.Peers) == 1 {
-					Online_elev[2] =-1
-					Online_elev[1] = -1
+					Elevators_online[1] = -1
+					Elevators_online[2] = -1
 				}
 				if len(new_info.Peers) == 0 {
-					Online_elev[2] =-1
-					Online_elev[1] = -1
-					Online_elev[0] = -1
+					Elevators_online[1] = -1
+					Elevators_online[2] = -1
+					Elevators_online[0] = -1
+
 				}
+				Local_ip, _ = strconv.Atoi(local_ip[12:])
 				Choose_master()
 			}
 		}
@@ -142,15 +132,13 @@ func Network_setup(new_order_bool_chan chan bool) {
 
 		go bcast.Transmitter(broadcast_port, master_sender)
 		go bcast.Receiver(receive_port, master_receiver)
-		go master_transmit()
+		go master_transmit(master_sender)
 
 		for {
 			select {
 			case catch_msg_from_slave := <-master_receiver:
 				fmt.Println("Master received : ", catch_msg_from_slave)
-				queue.Master_msg_handler(catch_msg_from_slave)
-			case <- change_in_network_chan:
-
+				//queue.Master_msg_handler(catch_msg_from_slave)
 			}
 		}
 	} else {
@@ -160,22 +148,20 @@ func Network_setup(new_order_bool_chan chan bool) {
 
 		go bcast.Transmitter(broadcast_port, slave_sender)
 		go bcast.Receiver(receive_port, slave_receiver)
-		go slave_transmit()
+		go slave_transmit(slave_sender)
 
 		for {
 			select {
 			case catch_msg_from_master := <-slave_receiver:
 				fmt.Println("Slave received : ", catch_msg_from_master)
-				queue.Slave_msg_handler(catch_msg_from_master, new_order_bool_chan)
-			case <- change_in_network_chan:
-				//Choose_master()
+				//queue.Slave_msg_handler(catch_msg_from_master, new_order_bool_chan)
 			}
 		}
 	}
 }
 
-func master_transmit(){
-	var msg Master_msg
+func master_transmit(master_sender chan Master_msg) {
+	var master_msg_to_send Master_msg
 	for {
 		master_msg_to_send.Address = Local_ip
 		master_msg_to_send.Global_list = queue.Global_order_list
@@ -185,15 +171,15 @@ func master_transmit(){
 	}
 }
 
-func slave_transmit(){
-	var msg Slave_msg
+func slave_transmit(slave_sender chan Slave_msg) {
+	var slave_msg_to_send Slave_msg
 	for {
 		slave_msg_to_send.Address = Local_ip
 		slave_msg_to_send.Internal_list = queue.Internal_order_list
 		slave_msg_to_send.External_list = queue.External_order_list
-		slave_msg_to_send.Elevator_info = queue.Elev_info
+		//slave_msg_to_send.Elevator_info = queue.Elev_info
 		slave_sender <- slave_msg_to_send
-		fmt.Println("Slave sent the lists: ", )
+		fmt.Println("Slave sent the lists: ")
 		time.Sleep(1 * time.Second)
 	}
 }
