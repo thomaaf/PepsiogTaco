@@ -117,22 +117,17 @@ func Network_handler() {
 	}
 }
 
-func Network_setup(new_order_bool_chan chan bool, new_order_chan chan queue.Order) {
-	var receive_port, broadcast_port int
+func Network_receiver(new_order_bool_chan chan bool, new_order_chan chan queue.Order){
+	var receive_port int
 
-	master_sender := make(chan Master_msg)
-	master_receiver := make(chan Slave_msg)
-	slave_sender := make(chan Slave_msg)
 	slave_receiver := make(chan Master_msg)
+	master_receiver := make(chan Slave_msg)
 
+	for{
 	if Is_master {
 		fmt.Println("Connecting as the master.")
 		receive_port = slave_port
-		broadcast_port = master_port
-
-		go bcast.Transmitter(broadcast_port, master_sender)
 		go bcast.Receiver(receive_port, master_receiver)
-		go master_transmit(master_sender)
 
 		for {
 			select {
@@ -143,15 +138,13 @@ func Network_setup(new_order_bool_chan chan bool, new_order_chan chan queue.Orde
 				Master_msg_handler(msg_from_slave, new_order_bool_chan, new_order_chan)
 				//queue.Master_msg_handler(catch_msg_from_slave)
 			}
+			if Is_master == false { break}
 		}
 	} else {
 		fmt.Println("Connecting as a slave.")
 		receive_port = master_port
-		broadcast_port = slave_port
 
-		go bcast.Transmitter(broadcast_port, slave_sender)
 		go bcast.Receiver(receive_port, slave_receiver)
-		go slave_transmit(slave_sender)
 
 		for {
 			select {
@@ -161,31 +154,72 @@ func Network_setup(new_order_bool_chan chan bool, new_order_chan chan queue.Orde
 				fmt.Println("Slave received : ", catch_msg_from_master)
 				//queue.Slave_msg_handler(catch_msg_from_master, new_order_bool_chan)
 			}
+			if Is_master == true { break}
+		}
+	}
+}
+}
+
+
+func Network_sender(new_order_bool_chan chan bool, new_order_chan chan queue.Order){
+	var broadcast_port int
+
+	master_sender := make(chan Master_msg)
+	slave_sender := make(chan Slave_msg)
+
+	for {
+	if Is_master {
+		for{
+		fmt.Println("Connecting as the master.")
+		broadcast_port = master_port
+
+		go bcast.Transmitter(broadcast_port, master_sender)
+		go master_transmit(master_sender)
+		time.Sleep(1*time.Second)
+		if Is_master == false { break}
+	}
+	} else {
+		for{
+		fmt.Println("Connecting as a slave.")
+		broadcast_port = slave_port
+
+		go bcast.Transmitter(broadcast_port, slave_sender)
+		go slave_transmit(slave_sender)
+		time.Sleep(1*time.Second)
+		if Is_master {break}
+		}
 		}
 	}
 }
 
+
+
+
+
+
+
+//FJERNET FOR INNI TRANSMITTENE. Det hjalp
 func master_transmit(master_sender chan Master_msg) {
 	var master_msg_to_send Master_msg
-	for {
+	
 		master_msg_to_send.Address = Local_ip
 		master_msg_to_send.Global_list = queue.Global_order_list
 		master_sender <- master_msg_to_send
 		fmt.Println("Master sent the global list: ", master_msg_to_send.Global_list)
 		time.Sleep(1 * time.Second)
-	}
+	
 }
 
 func slave_transmit(slave_sender chan Slave_msg) {
 	var slave_msg_to_send Slave_msg
-	for {
+	
 		slave_msg_to_send.Address = Local_ip
 		slave_msg_to_send.Internal_list = queue.Internal_order_list
 		slave_msg_to_send.External_list = queue.External_order_list
 		//slave_msg_to_send.Elevator_info = queue.Elev_info
 		slave_sender <- slave_msg_to_send
 		time.Sleep(1 * time.Second)
-	}
+	
 }
 
 func Master_msg_handler(msg_from_slave Slave_msg, new_order_bool_chan chan bool, new_order_chan chan queue.Order) {
