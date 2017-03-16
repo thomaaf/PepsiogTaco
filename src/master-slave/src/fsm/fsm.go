@@ -96,7 +96,7 @@ func event_idle(new_order_bool_chan chan bool) {
 	if order_exist == false {
 		select {
 		case <-new_order_bool_chan:
-			this_order := current_order
+			var this_order queue.Order
 			new_order_Assigned_to_me := false
 			//fmt.Println("Got new order bool ", catch_new_order_bool, " in Idle.")
 			//fmt.Println("Now checking for orders that needs to be done inside the select case in event_idle")
@@ -108,6 +108,7 @@ func event_idle(new_order_bool_chan chan bool) {
 						fmt.Println("The current order is internal---------------------------------------")
 						//current_order = queue.Internal_order_list[i]
 						this_order = queue.Internal_order_list[i]
+						current_order = this_order
 						fmt.Println("This order is: ", this_order)
 						new_order_Assigned_to_me = true
 
@@ -150,7 +151,7 @@ func event_idle(new_order_bool_chan chan bool) {
 
 func event_moving(update_order_chan chan queue.Order) {
 	fmt.Println("Running event: Moving.")
-	elevator_to_floor(current_order.Floor, update_order_chan)
+	elevator_to_floor(update_order_chan)
 	/*if Elev_state != Idle {
 		Elev_state = Door_open
 	}*/
@@ -177,7 +178,7 @@ func event_door_open(update_order_chan chan queue.Order) {
 	Elev_state = Idle // <- sette global state inne i funksjonen
 }
 
-func elevator_to_floor(floor global.Floor_t, update_order_chan chan queue.Order) {
+func elevator_to_floor(update_order_chan chan queue.Order) {
 	// Check if the elevator is between two floors
 	between_two_floors_timer := time.NewTimer(3 * time.Second)
 	timeout_between_floors := false
@@ -205,7 +206,7 @@ func elevator_to_floor(floor global.Floor_t, update_order_chan chan queue.Order)
 	// Go to desired floor
 	current_floor_int := driver.Get_floor_sensor_signal()
 	current_floor := driver.Floor_int_to_floor_t(current_floor_int)
-	floor_int := driver.Floor_t_to_floor_int(floor)
+	floor_int := driver.Floor_t_to_floor_int(current_order.Floor)
 	fmt.Println("Current floor int: ", current_floor_int, ", floor int: ", floor_int, ", current floor: ", current_floor)
 
 	if current_floor_int < floor_int {
