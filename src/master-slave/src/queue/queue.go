@@ -181,7 +181,9 @@ func Add_new_external_order(new_order Order, new_order_bool_chan chan bool, new_
 		if External_order_list[i].Order_state == Inactive || External_order_list[i].Order_state == Finished {
 			External_order_list[i] = new_order
 			fmt.Println("New external order was added!")
-			go Bool_to_new_order_channel(true, new_order_bool_chan)
+			if new_order.Assigned_to != 0 {
+				go Bool_to_new_order_channel(true, new_order_bool_chan)
+			}
 			break
 		}
 		if External_order_list[i].Floor == new_order_floor && External_order_list[i].Button == new_order_button {
