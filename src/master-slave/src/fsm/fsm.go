@@ -225,9 +225,12 @@ func elevator_to_floor(update_order_chan chan queue.Order) {
 				//pick_up_order_on_the_way(current_floor, order_list, updated_order_chan, current_order)
 				//time.Sleep(10 * time.Millisecond)
 				//is_order := stop_if_order_in_floor(current_floor, update_order_chan)
+				//fmt.Println("Checking floor if any order")
 				is_order := check_if_order_in_floor(this_floor)
 				//fmt.Println("We have an order in this floor.")
+				//fmt.Println("Is order: ", is_order)
 				if is_order {
+					//fmt.Println("Setting state to door open.")
 					Elev_state = Door_open
 					break
 				}
@@ -292,16 +295,20 @@ func elevator_to_floor(update_order_chan chan queue.Order) {
 
 func check_if_order_in_floor(floor global.Floor_t) bool {
 	for i := 0; i < global.NUM_INTERNAL_ORDERS; i++ {
-		if queue.Internal_order_list[i].Floor == floor && queue.Internal_order_list[i].Order_state != queue.Inactive {
-			current_order = queue.Internal_order_list[i]
-			//fmt.Println("The current order is: ", current_order, " , and the queue element is: ", queue.Internal_order_list[i])
-			return true
+		if queue.Internal_order_list[i].Floor == floor {
+			if queue.Internal_order_list[i].Order_state != queue.Inactive && queue.Internal_order_list[i].Order_state != queue.Finished{
+				current_order = queue.Internal_order_list[i]
+				//fmt.Println("The current order is: ", current_order, " , and the queue element is: ", queue.Internal_order_list[i])
+				return true
+			}
 		}
 	}
 	for i := 0; i < global.NUM_GLOBAL_ORDERS; i++ {
-		if queue.External_order_list[i].Floor == floor && queue.External_order_list[i].Order_state != queue.Inactive {
-			current_order = queue.External_order_list[i]
-			return true
+		if queue.External_order_list[i].Floor == floor  {
+			if queue.External_order_list[i].Order_state != queue.Inactive && queue.External_order_list[i].Order_state != queue.Finished{
+				current_order = queue.External_order_list[i]
+				return true
+			}
 		}
 	}
 	return false
