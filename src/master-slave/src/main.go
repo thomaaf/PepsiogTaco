@@ -14,6 +14,7 @@ import (
 	"network"
 	"ordermanager"
 	"queue"
+	//"time"
 )
 
 func main() {
@@ -31,7 +32,9 @@ func main() {
 
 	// test network
 	go network.Network_handler()
-	go network.Network_setup(new_order_bool_chan, new_order_chan)
+	//time.Sleep(4*time.Second)
+	go network.Network_sender(new_order_bool_chan, new_order_chan)
+	go network.Network_receiver(new_order_bool_chan, new_order_chan)
 
 	fmt.Println("I am ready")
 
